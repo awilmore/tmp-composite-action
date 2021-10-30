@@ -16,13 +16,13 @@ def main():
     print()
 
     # Get github token
-    #token = get_env_var('INPUT_TOKEN')
-    #repo_name = get_env_var('GITHUB_REPOSITORY')
+    token = get_env_var('INPUT_TOKEN')
+    repo_name = get_env_var('GITHUB_REPOSITORY')
 
     # Create client
-    #gh = github.Github(token)
-    #print(' * Github client created:')
-    #print(gh)
+    gh = github.Github(token)
+    print(' * Github client created:')
+    print(gh)
 
     # Display env vars
     print(' * Displaying all env vars:')
