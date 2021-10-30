@@ -52,7 +52,7 @@ def main():
 # Read github event data
 def read_event():
     # Find path
-    event_path = gen_env_var('GITHUB_EVENT_PATH')
+    event_path = get_env_var('GITHUB_EVENT_PATH')
 
     # Read json contents
     with open(event_path, 'r') as f:
