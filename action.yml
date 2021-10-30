@@ -1,13 +1,5 @@
 name: 'Tmp Composite Action'
 description: 'Testing Github actions'
-inputs:
-  repo-token:
-    required: true
-    description: Token of the user that creates the issue
-  testing:
-    required: false
-    description: Test input
-    default: 'default value'
 
 runs:
   using: "composite"
