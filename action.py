@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import github
+import json
 import os
 import signal
 import sys
