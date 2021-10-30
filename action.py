@@ -18,7 +18,7 @@ def main():
 
     # Get event details
     event_json = read_event()
-    pr_number = read_pull_request_number()
+    pr_number = get_pull_request_number()
 
     if not pr_number:
         print(' * Not a pull request.')
