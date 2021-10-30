@@ -15,14 +15,14 @@ def main():
     print(' * Composite action test')
     print()
 
-#    # Get github token
-#    token = get_env_var('INPUT_TOKEN')
-#    repo_name = get_env_var('GITHUB_REPOSITORY')
-#
-#    # Create client
-#    gh = github.Github(token)
-#    print(' * Github client created:')
-#    print(gh)
+    # Get github token
+    token = get_env_var('GITHUB_TOKEN')
+    repo_name = get_env_var('GITHUB_REPOSITORY')
+
+    # Create client
+    gh = github.Github(token)
+    print(' * Github client created:')
+    print(gh)
 
     # Display env vars
     print(' * Displaying all env vars:')
@@ -42,10 +42,16 @@ def get_env_var(env_var_name, strict=True):
     # Handle missing value
     if not value:
         if strict:
-            print(f'error: env var not found: {env_var_name}')
-            sys.exit(1)
-        else:
-            value = ''
+            if env_var_name == 'GITHUB_TOKEN':
+                print(f'error: env var not found: {env_var_name}')
+                print('''please ensure your workflow step includes
+                env:
+                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}''')
+                sys.exit(1)
+
+            else:
+                print(f'error: env var not found: {env_var_name}')
+                sys.exit(1)
 
     return value
 
