@@ -13,12 +13,12 @@ runs:
   using: "composite"
   steps:
     - run: |
-        echo "INPUT_TOKEN=$${{ inputs.token }}" >> $GITHUB_ENV
+        echo "Env vars:"
+        env | sort
+        echo
       shell: bash
     - run: pip install -r ${{ github.action_path}}/requirements.txt
       shell: bash
     - run: |
-        echo "inputs.testing: ${{ inputs.testing }}"
-        echo "env.INPUT_TESTING: ${{ env.INPUT_TESTING }}"
         ${{ github.action_path }}/action.py
       shell: bash
