@@ -14,5 +14,8 @@ runs:
   steps:
     - run: pip install -r ${{ github.action_path}}/requirements.txt
       shell: bash
-    - run: ${{ github.action_path }}/action.py
+    - run: |
+        echo "inputs.testing: ${{ inputs.testing }}"
+        echo "env.INPUT_TESTING: ${{ env.INPUT_TESTING }}"
+        ${{ github.action_path }}/action.py
       shell: bash
