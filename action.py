@@ -8,14 +8,17 @@ import sys
 
 
 ###
+# GLOBALS
+###
+
+COMMENT_TOKEN = 'SonarScan'
+
+
+###
 # MAIN METHOD
 ###
 
 def main():
-    print()
-    print(' * Composite action test')
-    print()
-
     # Get event details
     event_json = read_event()
     pr_number = get_pull_request_number(event_json)
@@ -35,8 +38,8 @@ def main():
     repo = gh.get_repo(repo_name)
     pr = repo.get_pull(pr_number)
 
-    print(' * PR:')
-    print(pr)
+    # Update PR with comment
+    pr.create_issue_comment(f'{COMMENT_TOKEN}: new comment.')
 
     # Finished
     print()

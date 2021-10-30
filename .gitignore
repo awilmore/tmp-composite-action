@@ -3,3 +3,6 @@
 
 # Generated
 .venv
+
+# Misc
+test.sh
