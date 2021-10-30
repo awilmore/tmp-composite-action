@@ -39,7 +39,7 @@ def main():
     pr = repo.get_pull(pr_number)
 
     # Update PR with comment
-    pr.create_issue_comment(f'{COMMENT_TOKEN}: new comment.')
+    pr.create_issue_comment(f'{COMMENT_TOKEN}: sonar scan complete.')
 
     # Finished
     print()
