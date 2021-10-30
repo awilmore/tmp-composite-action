@@ -16,35 +16,45 @@ def main():
     print(' * Composite action test')
     print()
 
+    # Get event details
+    event_json = read_event()
+    pr_number = read_pull_request_number()
+
+    if not pr_number:
+        print(' * Not a pull request.')
+        sys.exit()
+
+    print(f' * PR NUMBER: {pr_number}')
+
     # Get github params
     token = get_env_var('GITHUB_TOKEN')
     repo_name = get_env_var('GITHUB_REPOSITORY')
-    #pr_number = get_env_var('', strict=False)
 
-    # Create client
+    # Fetch PR details
     gh = github.Github(token)
+    repo = gh.get_repo(repo_name)
+    pr = repo.get_pull(pr_number)
 
-    ## Display env vars
-    #print(' * Displaying all env vars:')
-    #show_all_env_vars()
-
-    # Get event details
-    event_json = read_event()
-    pr_number = event_json['pull_request']['number']
-    print(f' * PR NUMBER: {pr_number}')
-
-    # List PR comments
-#    if pr_number:
-#        repo = gh.get_repo(repo_name)
-#        pr = repo.get_pull(pr_number)
-#
-#    else:
-#        print(' * No Pull Request number detected.')
+    print(' * PR:')
+    print(pr)
 
     # Finished
     print()
     print(' * Done.')
     print()
+
+
+# Get PR number from event details
+def get_pull_request_number(event_json):
+    # Inspect json payload
+    if 'pull_request' in event_json:
+        pr = event_json['pull_request']
+
+        if 'number' in pr:
+            return int(pr['number'])
+
+    # Not a PR
+    return 0
 
 
 # Read github event data
@@ -79,15 +89,6 @@ def get_env_var(env_var_name, strict=True):
                 sys.exit(1)
 
     return value
-
-
-# TODO - remove:
-# Display env vars
-def show_all_env_vars():
-    # Loop through env vars
-    for env_name in sorted(os.environ):
-        env_value = os.environ[env_name]
-        print('%-25s = %s' % (env_name, env_value))
 
 
 # Handle interrupt
