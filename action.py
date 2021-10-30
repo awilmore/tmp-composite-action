@@ -6,7 +6,9 @@ from sonarqube import SonarQubeClient
 import github
 import json
 import os
+import re
 import signal
+import sonarqube
 import sys
 
 
@@ -14,9 +16,9 @@ import sys
 # GLOBALS
 ###
 
-SONAR_LOGO       = '![image](https://github.com/awilmore/tmp-composite-action/raw/master/images/sonar-logo-s.png'
-SONAR_PROPERTIES = 'sonar-project.properties'
-METRIC_KEYS      = 'coverage,code_smells,bugs'
+SONAR_LOGO          = '![image](https://github.com/awilmore/tmp-composite-action/raw/master/images/sonar-logo-s.png) '
+SONAR_PROPERTIES    = 'sonar-project.properties'
+DEFAULT_METRIC_KEYS = ['coverage', 'code_smells', 'bugs']
 
 
 ###
@@ -32,11 +34,14 @@ def main():
         print(' * Not a pull request.')
         sys.exit()
 
+    # Check for custom sonar metric keys
+    sonar_metric_keys = check_sonar_metric_keys()
+
     # Fetch sonar details
-    results = fetch_sonar_results()
+    results = fetch_sonar_results(sonar_metric_keys)
 
     # Generate PR comment
-    comment_body = generate_comment_body(results)
+    comment_body = generate_comment_body(results, sonar_metric_keys)
 
     # Get github params
     token = get_env_var('GITHUB_TOKEN')
@@ -50,37 +55,54 @@ def main():
     # Update PR with comment
     update_pr_comment(pr, comment_body)
 
-    # Finished
-    print()
-    print(' * Done.')
-    print()
+
+# Check if project uses custom metric keys via SONAR_METRIC_KEYS
+def check_sonar_metric_keys():
+    custom_keys = get_env_var('SONAR_METRIC_KEYS', strict=False)
+
+    # Return defaults if no env var found
+    if not custom_keys:
+        return DEFAULT_METRIC_KEYS
+
+    # Convert env var to list of metric keys
+    key_list = custom_keys.split(',')
+    return key_list
 
 
 # Update PR with sonar scan comment
 def update_pr_comment(pr, comment_body):
-    # Retrieve comments to avoid duplicates
-    for c in pr.get_issue_comments():
-        if c.body == comment_body:
-            # Do not recreate duplicate comment
-            print(' * Sonar scan results comment already exists')
-            return
+    # Retrieve most recent sonar scan comment to avoid duplicates
+    recent_comment = ''
+    for c in pr.get_issue_comments().reversed:
+        if SONAR_LOGO in c.body:
+            recent_comment = c.body
+            break
+
+    # Check if results in recent comment match
+    if recent_comment == comment_body:
+        # Do not recreate duplicate comment
+        print(' * Sonar scan results comment already exists. No update.')
+        return
 
     # Note: new comments will be added each time scan results change
-    print(' * Creating PR comment with sonar scan results')
+    print(' * Creating PR comment with latest sonar scan results')
 
     # Create sonar scan comment
     pr.create_issue_comment(comment_body)
 
 
 # Create PR comment body
-def generate_comment_body(results):
+def generate_comment_body(results, sonar_metric_keys):
     # Begin comment
     comment = f'{SONAR_LOGO}  **Scan Results**:\n'
 
-    for key in sorted(results):
+    # Scan through in order of METRIC_KEYS
+    for key in sonar_metric_keys:
         value = results[key]
+
+        # Special treatment for 'coverage' metric key
         if key == 'coverage':
-            value = f'{value}%'
+            value = f'{value}%'  # include percentage character
 
         comment += f' * **{key}**: {value}\n'
 
@@ -88,7 +110,7 @@ def generate_comment_body(results):
 
 
 # Fetch sonar results
-def fetch_sonar_results():
+def fetch_sonar_results(sonar_metric_keys):
     # Get sonar project key
     sonar_project = read_sonar_project_key()
 
@@ -100,8 +122,21 @@ def fetch_sonar_results():
     sonar = SonarQubeClient(sonarqube_url=sonar_url, token=sonar_token)
 
     # Find project details
-    component = sonar.measures.get_component_with_specified_measures(component=sonar_project, version="dev-another-pr-1", fields="metrics,periods", metricKeys=METRIC_KEYS)
-    measures = component['component']['measures']
+    metric_keys = ','.join(sonar_metric_keys)
+
+    try:
+        component = sonar.measures.get_component_with_specified_measures(component=sonar_project, version="dev-another-pr-1", fields="metrics,periods", metricKeys=metric_keys)
+        measures = component['component']['measures']
+
+    except sonarqube.utils.exceptions.NotFoundError as e:
+        # Determine problematic field
+        m = re.search('The following metric keys are not found: (.*)$', str(e))
+        match = m.group(1)
+
+        # Log error
+        print(f'error: unknown sonar metric key set in SONAR_METRIC_KEYS: key={match}')
+        print('reference: https://docs.sonarqube.org/latest/user-guide/metric-definitions/')
+        sys.exit()
 
     # Parse results
     results = {}
@@ -110,9 +145,13 @@ def fetch_sonar_results():
         value = metric['value']
         results[field] = value
 
-    # Check for coverage
-    if 'coverage' not in results:
-        results['coverage'] = 0
+    # Ensure value exists for each metric key to avoid KeyError exceptions
+    for metric in sonar_metric_keys:
+        if metric not in results:
+            results[metric] = 0
+
+    # Log results for action output
+    print(f' * Sonar scan results: {results}')
 
     # Return results
     return results
