@@ -1,10 +1,9 @@
 name: 'Tmp Composite Action'
 description: 'Testing Github actions'
 inputs:
-  who-to-greet:  # id of input
-    description: 'Who to greet'
+  token: # token variable available in workflow as env var named INPUT_TOKEN
     required: true
-    default: 'World'
+    description: Token of the user that creates the issue
 outputs:
   random-number:
     description: "Random number"
@@ -12,10 +11,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - run: echo Hello ${{ inputs.who-to-greet }}.
-      shell: bash
-    - id: random-number-generator
-      run: echo "::set-output name=random-id::$(echo $RANDOM)"
+    - run: pip install -r ${{ github.action_path}}/requirements.txt
       shell: bash
     - run: ${{ github.action_path }}/action.py
       shell: bash
