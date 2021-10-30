@@ -23,8 +23,6 @@ def main():
 
     # Create client
     gh = github.Github(token)
-    print(' * Github client created:')
-    print(gh)
 
     ## Display env vars
     #print(' * Displaying all env vars:')
@@ -32,9 +30,8 @@ def main():
 
     # Get event details
     event_json = read_event()
-    print(' * event_json:')
-    print(event_json)
-    print()
+    pr_number = event_json['pull_request']['number']
+    print(f' * PR NUMBER: {pr_number}')
 
     # List PR comments
 #    if pr_number:
