@@ -4,12 +4,14 @@ description: 'Testing Github actions'
 runs:
   using: "composite"
   steps:
-#    - run: |
-#        echo "Env vars:"
-#        env | sort
-#        echo
-#      shell: bash
-    - run: pip install -r ${{ github.action_path}}/requirements.txt
+    - run: |
+        echo "PWD: $( pwd )"
+        echo
+        echo "Env vars:"
+        env | sort
+        echo
+      shell: bash
+    - run: pip install -r ${{ github.action_path }}/requirements.txt
       shell: bash
     - run: |
         ${{ github.action_path }}/action.py
