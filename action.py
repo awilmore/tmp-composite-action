@@ -159,8 +159,12 @@ def fetch_sonar_results(sonar_metric_keys):
 
 # Read sonar-project.properties file
 def read_sonar_project_key():
+    # Get path to sonar properties
+    workspace_path = get_env_var('GITHUB_WORKSPACE')
+    sonar_properties = f'{workspace_path}/{SONAR_PROPERTIES}'
+
     # Read sonar properties
-    with(open(SONAR_PROPERTIES, 'r')) as f:
+    with(open(sonar_properties, 'r')) as f:
         for prop in [line.rstrip() for line in f]:
             name, value = prop.split('=')
 
