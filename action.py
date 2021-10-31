@@ -27,25 +27,6 @@ DEFAULT_METRIC_KEYS = ['coverage', 'code_smells', 'bugs']
 ###
 
 def main():
-
-    # DEBUGGING
-    print(' * executing: pwd ...', flush=True)
-    subprocess.run('pwd', shell=True)
-    print()
-
-    print(' * executing: ls -la ...', flush=True)
-    subprocess.run('ls -la', shell=True)
-    print()
-
-    workspace_path = get_env_var('GITHUB_WORKSPACE')
-    print(f' * executing: ls -la {workspace_path} ...', flush=True)
-    subprocess.run(f'ls -la {workspace_path}', shell=True)
-    print()
-
-    print(' * Done.', flush=True)
-
-
-
     # Get event details
     event_json = read_event()
     pr_number = get_pull_request_number(event_json)
