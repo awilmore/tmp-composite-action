@@ -21,6 +21,9 @@ SONAR_LOGO          = '![image](https://github.com/awilmore/tmp-composite-action
 SONAR_PROPERTIES    = 'sonar-project.properties'
 DEFAULT_METRIC_KEYS = ['coverage', 'code_smells', 'bugs']
 
+SONAR_COMPARISON_KEYS = ['coverage', 'lines', 'code_smells', 'bugs']
+SONAR_OVERALL_KEYS = ['complexity']
+
 
 ###
 # MAIN METHOD
@@ -35,14 +38,11 @@ def main():
         print(' * Not a pull request.')
         sys.exit()
 
-    # Check for custom sonar metric keys
-    sonar_metric_keys = check_sonar_metric_keys()
-
     # Fetch sonar details
-    results = fetch_sonar_results(sonar_metric_keys)
+    results = fetch_sonar_results()
 
     # Generate PR comment
-    comment_body = generate_comment_body(results, sonar_metric_keys)
+    comment_body = generate_comment_body(results)
 
     # Get github params
     token = get_env_var('GITHUB_TOKEN')
@@ -55,19 +55,6 @@ def main():
 
     # Update PR with comment
     update_pr_comment(pr, comment_body)
-
-
-# Check if project uses custom metric keys via SONAR_METRIC_KEYS
-def check_sonar_metric_keys():
-    custom_keys = get_env_var('SONAR_METRIC_KEYS', strict=False)
-
-    # Return defaults if no env var found
-    if not custom_keys:
-        return DEFAULT_METRIC_KEYS
-
-    # Convert env var to list of metric keys
-    key_list = custom_keys.split(',')
-    return key_list
 
 
 # Update PR with sonar scan comment
@@ -93,25 +80,36 @@ def update_pr_comment(pr, comment_body):
 
 
 # Create PR comment body
-def generate_comment_body(results, sonar_metric_keys):
+def generate_comment_body(results):
     # Begin comment
-    comment = f'{SONAR_LOGO}  **Scan Results**:\n'
+    comment = f'{SONAR_LOGO}  **Scan Results**:\n\n'
 
-    # Scan through in order of METRIC_KEYS
-    for key in sonar_metric_keys:
-        value = results[key]
+    # Start table header
+    comment += '| Metric | Latest Scan | Overall |\n|-------|--------------|---------|\n'
+
+    # Scan through in order of METRIC_COMPARISON_KEYS
+    for key in SONAR_COMPARISON_KEYS:
+        overall_value = results[key]
+        new_value = results[f'new_{key}']
 
         # Special treatment for 'coverage' metric key
-        if key == 'coverage':
-            value = f'{value}%'  # include percentage character
+        if 'coverage' in key:
+            overall_value = f'{overall_value}%'  # include percentage character
+            new_value = f'{new_value}%'          # include percentage character
 
-        comment += f' * **{key}**: {value}\n'
+        comment += f'| {key} | {new_value} | {overall_value} |\n'
 
+    # Add overall result values
+    for key in SONAR_OVERALL_KEYS:
+        overall_value = results[key]
+        comment += f'| {key} | - | {overall_value} |\n'
+
+    # Return comment
     return comment.rstrip()
 
 
 # Fetch sonar results
-def fetch_sonar_results(sonar_metric_keys):
+def fetch_sonar_results():
     # Get sonar project key
     sonar_project = read_sonar_project_key()
 
@@ -122,11 +120,21 @@ def fetch_sonar_results(sonar_metric_keys):
     # Create sonar client
     sonar = SonarQubeClient(sonarqube_url=sonar_url, token=sonar_token)
 
-    # Find project details
-    metric_keys = ','.join(sonar_metric_keys)
+    metric_keys = []
+
+    # For keys paired with `new_*` values
+    for k in SONAR_COMPARISON_KEYS:
+        metric_keys.append(k)
+        metric_keys.append(f'new_{k}')
+
+    # For remaining "overall" keys
+    [metric_keys.append(k) for k in SONAR_OVERALL_KEYS]
+
+    # Prepare metric key query
+    metric_keys_str = ','.join(metric_keys)
 
     try:
-        component = sonar.measures.get_component_with_specified_measures(component=sonar_project, version="dev-another-pr-1", fields="metrics,periods", metricKeys=metric_keys)
+        component = sonar.measures.get_component_with_specified_measures(component=sonar_project, version="dev-another-pr-1", fields="metrics,periods", metricKeys=metric_keys_str)
         measures = component['component']['measures']
 
     except sonarqube.utils.exceptions.NotFoundError as e:
@@ -143,11 +151,16 @@ def fetch_sonar_results(sonar_metric_keys):
     results = {}
     for metric in measures:
         field = metric['metric']
-        value = metric['value']
+
+        if 'period' in metric:
+            value = metric['period']['value']
+        else:
+            value = metric['value']
+
         results[field] = value
 
     # Ensure value exists for each metric key to avoid KeyError exceptions
-    for metric in sonar_metric_keys:
+    for metric in metric_keys:
         if metric not in results:
             results[metric] = 0
 
