@@ -17,12 +17,10 @@ import sys
 # GLOBALS
 ###
 
-SONAR_LOGO          = '![image](https://github.com/awilmore/tmp-composite-action/raw/master/images/sonar-logo-s.png) '
-SONAR_PROPERTIES    = 'sonar-project.properties'
-DEFAULT_METRIC_KEYS = ['coverage', 'code_smells', 'bugs']
-
+SONAR_LOGO            = '![image](https://github.com/awilmore/tmp-composite-action/raw/master/images/sonar-logo-s.png) '
+SONAR_PROPERTIES      = 'sonar-project.properties'
 SONAR_COMPARISON_KEYS = ['coverage', 'lines', 'code_smells', 'bugs']
-SONAR_OVERALL_KEYS = ['complexity']
+SONAR_OVERALL_KEYS    = ['complexity']
 
 
 ###
@@ -85,7 +83,7 @@ def generate_comment_body(results):
     comment = f'{SONAR_LOGO}  **Scan Results**:\n\n'
 
     # Start table header
-    comment += '| Metric | Latest Scan | Overall |\n|-------|--------------|---------|\n'
+    comment += '| Metric | This PR | Overall |\n|-------|--------------|---------|\n'
 
     # Scan through in order of METRIC_COMPARISON_KEYS
     for key in SONAR_COMPARISON_KEYS:
