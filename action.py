@@ -57,14 +57,15 @@ def main():
 # Update PR with sonar scan comment
 def update_pr_comment(pr, sonar_project_key, result_hash, results):
     # Retrieve most recent sonar scan comment to avoid duplicates
-    recent_comment = ''
+    issue_comment = None
+
     for c in pr.get_issue_comments().reversed:
         if SONAR_LOGO in c.body:
-            recent_comment = c.body
+            issue_comment = c
             break
 
     # Check comment for result hash
-    pr_result_hash = extract_result_hash(recent_comment)
+    pr_result_hash = extract_result_hash(issue_comment)
 
     # Check if result hashes match
     if pr_result_hash == result_hash:
@@ -75,9 +76,14 @@ def update_pr_comment(pr, sonar_project_key, result_hash, results):
     # Note: new comments will be added each time scan results change
     print(' * Creating PR comment with latest sonar scan results')
 
-    # Create sonar scan comment
+    # Create comment body
     comment_body = generate_comment_body(sonar_project_key, result_hash, results)
-    pr.create_issue_comment(comment_body)
+
+    # Create or update pull request comment
+    if issue_comment:
+        issue_comment.edit(comment_body)
+    else:
+        pr.create_issue_comment(comment_body)
 
 
 # Create PR comment body
@@ -146,7 +152,14 @@ def generate_result_hash(results):
 
 
 # Extract result_hash value from comment_body
-def extract_result_hash(comment_body):
+def extract_result_hash(issue_comment):
+    # Check issue comment
+    if not issue_comment:
+        return '(not found)'
+
+    # Get comment body
+    comment_body = issue_comment.body
+
     # Check for HTML comment string
     comment_search = re.search('(<!-- sonar_results: .* -->)', comment_body)
 
