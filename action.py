@@ -18,10 +18,10 @@ import sys
 # GLOBALS
 ###
 
+# TODO - change logo to mx51 repo link
 SONAR_LOGO            = '![image](https://github.com/awilmore/tmp-composite-action/raw/master/images/sonar-logo-s.png) '
 SONAR_PROPERTIES      = 'sonar-project.properties'
-SONAR_COMPARISON_KEYS = ['coverage', 'lines', 'code_smells', 'bugs']
-SONAR_OVERALL_KEYS    = ['complexity']
+SONAR_DEFAULT_KEYS    = ['coverage', 'lines', 'code_smells', 'bugs', 'complexity']
 
 
 ###
@@ -39,7 +39,6 @@ def main():
 
     # Fetch sonar details
     sonar_project_key, results = fetch_sonar_results()
-    result_hash = generate_result_hash(results)
 
     # Get github params
     token = get_env_var('GITHUB_TOKEN')
@@ -51,11 +50,11 @@ def main():
     pr = repo.get_pull(pr_number)
 
     # Update PR with comment
-    update_pr_comment(pr, sonar_project_key, result_hash, results)
+    update_pr_comment(pr, sonar_project_key, results)
 
 
 # Update PR with sonar scan comment
-def update_pr_comment(pr, sonar_project_key, result_hash, results):
+def update_pr_comment(pr, sonar_project_key, results):
     # Retrieve most recent sonar scan comment to avoid duplicates
     issue_comment = None
 
@@ -68,6 +67,8 @@ def update_pr_comment(pr, sonar_project_key, result_hash, results):
     pr_result_hash = extract_result_hash(issue_comment)
 
     # Check if result hashes match
+    result_hash = generate_result_hash(results)
+
     if pr_result_hash == result_hash:
         # Do not recreate duplicate comment
         print(' * Sonar scan results comment already exists. No update.')
@@ -95,10 +96,10 @@ def generate_comment_body(sonar_project_key, result_hash, results):
     # Start table header
     comment += '| Metric | This PR | Overall |\n|-------|--------------|---------|\n'
 
-    # Scan through in order of METRIC_COMPARISON_KEYS
-    for key in SONAR_COMPARISON_KEYS:
-        overall_value = results[key]
-        new_value = results[f'new_{key}']
+    for metric in results:
+        key = metric['metric']
+        new_value = metric['new_value']
+        overall_value = metric['overall_value']
 
         # Special treatment for 'coverage' metric key
         if 'coverage' in key:
@@ -107,11 +108,6 @@ def generate_comment_body(sonar_project_key, result_hash, results):
 
         # Create line item
         comment += result_line_item(sonar_project_key, key, new_value, overall_value)
-
-    # Add overall result values
-    for key in SONAR_OVERALL_KEYS:
-        overall_value = results[key]
-        comment += result_line_item(sonar_project_key, key, '-', overall_value)
 
     # Append result hash
     comment += result_hash
@@ -122,9 +118,12 @@ def generate_comment_body(sonar_project_key, result_hash, results):
 
 # Create a line item for Github comment table
 def result_line_item(sonar_project_key, key_name, new_value, overall_value):
+    # Use 'new_*' key for metric link if result available
+    metric_ref = key_name if new_value == '-' else f'new_{key_name}'
+
     # Generate key_name link
     base_url = generate_project_link(sonar_project_key)
-    key_url = f'{base_url}&metric={key_name}'
+    key_url = f'{base_url}&metric={metric_ref}'
 
     # Generate line item
     return f'| [{key_name}]({key_url}) | {new_value} | {overall_value} |\n'
@@ -135,16 +134,14 @@ def generate_result_hash(results):
     # Start new results table
     values = []
 
-    # Scan through in order of METRIC_COMPARISON_KEYS
-    for key in SONAR_COMPARISON_KEYS:
-        new_value = results[f'new_{key}']
-        overall_value = results[key]
-        values.append(f'{key},{new_value},{overall_value}')
+    # Iterate through metric keys
+    for metric in results:
+        key = metric['metric']
+        new_value = metric['new_value']
+        overall_value = metric['overall_value']
 
-    # Add overall result values
-    for key in SONAR_OVERALL_KEYS:
-        overall_value = results[key]
-        values.append(f'{key},-,{overall_value}')
+        # Store result
+        values.append(f'{key},{new_value},{overall_value}')
 
     # Return result
     hash_str = '|'.join(values)
@@ -180,24 +177,55 @@ def fetch_sonar_results():
     sonar_token = get_env_var('SONAR_TOKEN')
 
     # Create sonar client
-    sonar = SonarQubeClient(sonarqube_url=sonar_url, token=sonar_token)
+    sonar_client = SonarQubeClient(sonarqube_url=sonar_url, token=sonar_token)
 
-    metric_keys = []
+    # Get measurable keys (ie. valid sonar keys)
+    measurable_keys = get_measurable_keys(sonar_client)
 
-    # For keys paired with `new_*` values
-    for k in SONAR_COMPARISON_KEYS:
-        metric_keys.append(k)
-        metric_keys.append(f'new_{k}')
+    # Get project metric values
+    measures = fetch_project_measures(sonar_client, sonar_project_key, measurable_keys)
 
-    # For remaining "overall" keys
-    [metric_keys.append(k) for k in SONAR_OVERALL_KEYS]
+    # Note available keys from returned measures
+    available_keys = [m['metric'] for m in measures]
 
+    # Parse results
+    results = []
+    for key in measurable_keys:
+        # 'key' and 'new_key' results are processed together below
+        if key.startswith('new_'):
+            continue
+
+        # Initialise metric values
+        new_value = '-'
+        overall_value = '-'
+
+        # Check for overall value
+        if key in available_keys:
+            overall_value = extract_result(key, measures)
+
+        # Check if this 'key' has a corresponding 'new_key' result
+        if f'new_{key}' in available_keys:
+            new_value = extract_result(f'new_{key}', measures)
+
+        # Store result as dict
+        results.append({'metric': key, 'new_value': new_value, 'overall_value': overall_value})
+
+    # Log results for action output
+    print(f' * Sonar scan results: {results}')
+
+    # Return results
+    return sonar_project_key, results
+
+
+# Get metrics for project
+def fetch_project_measures(sonar_client, sonar_project_key, measurable_keys):
     # Prepare metric key query
-    metric_keys_str = ','.join(metric_keys)
+    measurable_keys_str = ','.join(measurable_keys)
 
+    # Call sonar
     try:
-        component = sonar.measures.get_component_with_specified_measures(component=sonar_project_key, version="dev-another-pr-1", fields="metrics,periods", metricKeys=metric_keys_str)
-        measures = component['component']['measures']
+        component = sonar_client.measures.get_component_with_specified_measures(component=sonar_project_key, version="dev-another-pr-1", fields="metrics,periods", metricKeys=measurable_keys_str)
+        return component['component']['measures']
 
     except sonarqube.utils.exceptions.NotFoundError as e:
         # Determine problematic field
@@ -209,28 +237,76 @@ def fetch_sonar_results():
         print('reference: https://docs.sonarqube.org/latest/user-guide/metric-definitions/')
         sys.exit()
 
-    # Parse results
-    results = {}
+
+# Get list of measurable keys (ie. valid sonar keys)
+def get_measurable_keys(sonar):
+    # Determine keys to use for results
+    metric_keys = get_metric_keys()
+
+    # Fetch available metric key names
+    available_metrics = fetch_available_metrics(sonar)
+
+    # Determine metric keys for displaying results
+    measurable_keys = []
+
+    # For keys paired with `new_*` values
+    for k in metric_keys:
+        measurable_keys.append(k)
+
+        # Check to see if key has corresponding 'new_*' metric
+        comparison_key = f'new_{k}'
+        if comparison_key in available_metrics:
+            measurable_keys.append(comparison_key)
+
+    return measurable_keys
+
+
+# Extract result values
+def extract_result(key, measures):
+    # Check for result
     for metric in measures:
-        field = metric['metric']
+        if metric['metric'] == key:
+            if 'period' in metric:
+                return metric['period']['value']
+            else:
+                return metric['value']
 
-        if 'period' in metric:
-            value = metric['period']['value']
-        else:
-            value = metric['value']
+    # No result
+    return '-'
 
-        results[field] = value
 
-    # Ensure value exists for each metric key to avoid KeyError exceptions
-    for metric in metric_keys:
-        if metric not in results:
-            results[metric] = 0
+# Check env var or use default metric keys
+def get_metric_keys():
+    # Determine keys to use for results
+    metric_keys_env_var = get_env_var('SONAR_METRIC_KEYS', strict=False)
 
-    # Log results for action output
-    print(f' * Sonar scan results: {results}')
+    # Use defaults if not specified
+    if metric_keys_env_var:
+        raw_keys = metric_keys_env_var.split(',')
+    else:
+        raw_keys = SONAR_DEFAULT_KEYS
 
-    # Return results
-    return sonar_project_key, results
+    # Remove any 'new_*' keys if included
+    metric_keys = []
+
+    for k in raw_keys:
+        if k.startswith('new_'):
+            k = k.replace('new_', '')
+
+        metric_keys.append(k)
+
+    # Remove duplicates and return
+    return list(dict.fromkeys(metric_keys))
+
+
+# Fetch available metric keys from sonar
+def fetch_available_metrics(sonar):
+    # Get key results
+    available_keys = []
+    for k in list(sonar.metrics.search_metrics()):
+        available_keys.append(k['key'])
+
+    return available_keys
 
 
 # Read sonar-project.properties file
